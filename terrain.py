@@ -318,7 +318,6 @@ def terrain_tu18(texture_dir: str, jar_path=None):
         (f'{texture_dir}block\\dropper_front.png', 1, 11),
         (f'{texture_dir}block\\beacon.png', 2, 9, (0, 272)),
         (f'{texture_dir}block\\dropper_front_vertical.png', 2, 10),
-        ('missing.png', 2, 10),
         (f'{texture_dir}block\\daylight_detector_top.png', 3, 9),
         (f'{texture_dir}block\\daylight_detector_side.png', 3, 10),
         (f'{texture_dir}block\\activator_rail.png', 11, 13),
