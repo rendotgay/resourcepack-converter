@@ -308,3 +308,38 @@ def terrain_1dot3(texture_dir: str, jar_path=None):
     ]
     paths = (jar_path, texture_dir)
     return grid_png('output\\terrain.png', texture_list, paths=paths)
+
+
+def terrain_tu18(texture_dir: str, jar_path=None):
+    texture_list = terrain_list(texture_dir)
+    texture_list += [
+        (f'{texture_dir}block\\emerald_block.png', 1, 9),
+        (f'{texture_dir}block\\redstone_block.png', 1, 10),
+        (f'{texture_dir}block\\dropper_front.png', 1, 11),
+        (f'{texture_dir}block\\beacon.png', 2, 9, (0, 272)),
+        (f'{texture_dir}block\\dropper_front_vertical.png', 2, 10),
+        ('missing.png', 2, 10),
+        (f'{texture_dir}block\\daylight_detector_top.png', 3, 9),
+        (f'{texture_dir}block\\daylight_detector_side.png', 3, 10),
+        (f'{texture_dir}block\\activator_rail.png', 11, 13),
+        (f'{texture_dir}block\\activator_rail_on.png', 11, 14),
+        # Some of these quartz textures (specifically quartz_block) might need changing
+        (f'{texture_dir}block\\chiseled_quartz_block_top.png', 13, 9),
+        (f'{texture_dir}block\\quartz_pillar_top.png', 13, 10),
+        (f'{texture_dir}block\\quartz_block_bottom.png', 13, 11),
+        # no clue what 13,12 is supposed to be??? looks like a stone wood? cauldron_side????
+        (f'{texture_dir}block\\detector_rail_on.png', 13, 13),
+        (f'{texture_dir}block\\chiseled_quartz_block.png', 14, 9),
+        (f'{texture_dir}block\\quartz_pillar.png', 14, 10),
+        (f'{texture_dir}block\\quartz_block_bottom.png', 14, 11),
+        (f'{texture_dir}block\\cauldron_inner.png', 14, 12),
+        (f'{texture_dir}block\\hay_block_side.png', 15, 10),
+        (f'{texture_dir}block\\quartz_block_top.png', 15, 11),
+        (f'{texture_dir}block\\cauldron_top.png', 15, 12),
+        (f'{texture_dir}block\\hay_block_top.png', 15, 13),
+        ('missing.png', 13, 9),
+        ('missing.png', 13, 10),
+        ('missing.png', 13, 11),
+    ]
+    paths = (jar_path, texture_dir)
+    return grid_png('output\\terrain.png', texture_list, paths=paths)
