@@ -336,9 +336,6 @@ def terrain_tu18(texture_dir: str, jar_path=None):
         (f'{texture_dir}block\\quartz_block_top.png', 15, 11),
         (f'{texture_dir}block\\cauldron_top.png', 15, 12),
         (f'{texture_dir}block\\hay_block_top.png', 15, 13),
-        ('missing.png', 13, 9),
-        ('missing.png', 13, 10),
-        ('missing.png', 13, 11),
     ]
     paths = (jar_path, texture_dir)
     return grid_png('output\\terrain.png', texture_list, paths=paths)
