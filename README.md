@@ -8,3 +8,4 @@ This is still a work in progress and is intended for my personal resource pack (
 ## To Do:
 - finish conversion of all files
 - add default assets
+- add models to point to current asset files to avoid duplication where possible
