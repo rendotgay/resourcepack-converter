@@ -83,10 +83,11 @@ def parse_json(vid=None):
     return None
 
 
-def parse_jar(vid=None):
+def parse_jar(vid=None, is_beta=False):
     """
     Finds all assets in the Minecraft JAR and returns their paths.
     :param vid: [Optional] The version ID for debugging purposes.
+    :param is_beta: Determines what assets to filter.
     :return: The contents of the assets folder from the version JAR
     """
     path = Path("assets/minecraft.jar")
@@ -99,8 +100,21 @@ def parse_jar(vid=None):
     contents = []
     with zipfile.ZipFile(path, "r") as archive:
         for filename in archive.namelist():
-            if filename.startswith("assets/") and not "atlases" in filename and not "shaders" in filename:
-                contents.append(filename)
+            if not is_beta:
+                if filename.startswith("assets/") and not "atlases" in filename and not "shaders" in filename:
+                    contents.append(filename)
+            else:
+                if (not filename.endswith(".class")
+                        and not filename.startswith("null")
+                        and not filename.startswith("com/")
+                        and not filename.startswith("META-INF/")
+                        and not filename.startswith("misc/")
+                        and not filename.startswith("net/")
+                        and not filename.startswith("paulscode/")
+                        and not filename.startswith("a/")
+                        and not filename.startswith("de/")
+                ):
+                    contents.append(filename)
         print(f"{YELLOW}{len(contents)} assets found in jar")
         return contents
 
@@ -138,88 +152,120 @@ def get_file_class(key):
     ext = key.rsplit(".", 1)[-1] if "." in key else ""
     classes = {
         "png":     "file-image",
+        "gif":     "file-image",
         "json":    "file-json",
         "mcmeta":  "file-mcmeta",
+        "txt":  "file-mcmeta",
         "fsh":     "file-shader",
         "vsh":     "file-shader",
         "ogg":     "file-audio",
+        "nbt":     "file-nbt",
+        "lang":     "file-lang",
     }
     return classes.get(ext, "file-unknown")
 
 
-def tree_to_html(tree, is_added, indent=0):
+def tree_to_html(tree, is_added, path=""):
     """Recursively builds HTML list items for the tree."""
     lines = []
     section_class = "added" if is_added else "removed"
     for key, subtree in sorted(tree.items()):
+        current_path = f"{path}-{key}" if path else key
         if is_file(key, subtree):
             file_class = get_file_class(key)
             lines.append(f'<li class="file {section_class} {file_class}">{key}</li>')
         else:
-            if is_added:
-                li_id = f"{subtree}-{key}-added"
-            else:
-                li_id = f"{subtree}-{key}-removed"
-            lines.append(f'<li class="folder" id="{li_id}">{key}')
-            lines.append(f'<a href="#{li_id}"><ul>')
-            lines.extend(tree_to_html(subtree, is_added, indent + 1))
-            lines.append('</ul></a>')
+            li_id = f"{current_path}-{'added' if is_added else 'removed'}"
+            lines.append(f'<li class="folder" id="{li_id}"><a href="#{li_id}">{key}</a>')
+            lines.append('<ul>')
+            lines.extend(tree_to_html(subtree, is_added, current_path))
+            lines.append('</ul>')
             lines.append('</li>')
     return lines
+
+
+def get_present_classes(tree, found=None):
+    """Recursively collects all file classes present in the tree."""
+    if found is None:
+        found = set()
+    for key, subtree in tree.items():
+        if is_file(key, subtree):
+            found.add(get_file_class(key))
+        else:
+            get_present_classes(subtree, found)
+    return found
 
 
 def export_changes(removed_tree, added_tree, vid1, vid2):
     os.makedirs("assets", exist_ok=True)
     filepath = f"assets/{vid1}_to_{vid2}.html"
 
+    present_classes = set()
+    if removed_tree:
+        present_classes |= get_present_classes(removed_tree)
+    if added_tree:
+        present_classes |= get_present_classes(added_tree)
+
+    has_json = "file-json" in present_classes
+    has_nbt  = "file-nbt"  in present_classes
+    has_lang  = "file-lang"  in present_classes
+
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Changes: {vid1} to {vid2}</title>
-    <style>
-        body {{ font-family: monospace; background: #1e1e1e; color: #ccc; padding: 2rem; }}
-        h1 {{ color: #fff; }}
-        h2 {{ margin-top: 2rem; }}
-        h2.added {{ color: #f44336; }}
-        h2.removed {{ color: #4caf50; }}
-        ul {{ list-style: none; padding-left: 1.5rem; }}
-        li.folder {{ color: #fff; margin-top: 0.25rem; }}
-        li.file {{ margin-top: 0.1rem; }}
-        li.added {{ color: #f44336; }}
-        li.removed {{ color: #4caf50; }}
-        li.file-image {{ }}
-        li.file-json {{ color: #d2b545; }}
-        li.file-mcmeta {{ color: #d2b545; }}
-        li.file-shader {{ color: #d2b545; }}
-        li.file-audio {{ color: #d2b545; }}
-        li.file-unknown {{ color: #719f72; }}
-        a {{ color: inherit; text-decoration: none; }}
-        code {{ color: white; }}
-        .hidden {{ display: none !important; }}
-        .buttons {{ display: flex; flex-direction: row; }}
-        .buttons button {{ 
-            background: transparent;
-            color: white;
-            border: 1px solid white;
-            border-radius: 6px;
-            padding: 5px 10px;
-            cursor: pointer;
-         }}
-         .buttons button:hover {{ 
-            background: white;
-            color: black;
-            border: 1px solid black;
-          }}
-    </style>
-</head>
-<body>
-    <h1>Changes: {vid1} &rarr; {vid2}</h1>
-    <div class="buttons">
-        <button id="hideJson">Hide JSON</button>
-    </div>
-""")
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <title>Changes: {vid1} to {vid2}</title>
+            <style>
+                body {{ font-family: monospace; background: #1e1e1e; color: #ccc; padding: 2rem; }}
+                h1 {{ color: #fff; }}
+                h2 {{ margin-top: 2rem; }}
+                h2.added {{ color: #f44336; }}
+                h2.removed {{ color: #4caf50; }}
+                ul {{ list-style: none; padding-left: 1.5rem; }}
+                li.folder {{ color: #fff; margin-top: 0.25rem; }}
+                li.file {{ margin-top: 0.1rem; }}
+                li.added {{ color: #f44336; }}
+                li.removed {{ color: #4caf50; }}
+                li.file-image {{ }}
+                li.file-json {{ color: #d2b545; }}
+                li.file-mcmeta {{ color: #d2b545; }}
+                li.file-shader {{ color: #d2b545; }}
+                li.file-audio {{ color: #d2b545; }}
+                li.file-nbt {{ color: #d2b545; }}
+                li.file-lang {{ color: #d2b545; }}
+                li.file-unknown {{ color: #719f72; }}
+                a {{ color: inherit; text-decoration: none; }}
+                code {{ color: white; }}
+                .hidden {{ display: none !important; }}
+                .buttons {{ display: flex; flex-direction: row; gap: 5px }}
+                .buttons button {{ 
+                    background: transparent;
+                    color: white;
+                    border: 1px solid white;
+                    border-radius: 6px;
+                    padding: 5px 10px;
+                    cursor: pointer;
+                }}
+                .buttons button:hover {{ 
+                    background: white;
+                    color: black;
+                    border: 1px solid black;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>Changes: {vid1} &rarr; {vid2}</h1>
+            <div class="buttons">
+        """)
+        if has_json:
+            f.write('        <button id="hideJson">Hide JSON</button>\n')
+        if has_nbt:
+            f.write('        <button id="hideNbt">Hide NBT</button>\n')
+        if has_lang:
+            f.write('        <button id="hideLang">Hide lang</button>\n')
+
+        f.write('    </div>\n')
 
         if added_tree:
             f.write(f'    <h2 class="added">Removed in {vid1}</h2>\n')
@@ -237,21 +283,35 @@ def export_changes(removed_tree, added_tree, vid1, vid2):
                 f.write(f'        {line}\n')
             f.write('    </ul>\n')
 
-        f.write(f"""</body>
-        <script>
+        f.write('<script>\n')
+        if has_json:
+            f.write("""
             const jsonBtn = document.getElementById('hideJson');
-            
-            jsonBtn.addEventListener('click', () => {{
-                document.querySelectorAll('.file-json').forEach(el => {{
-                    el.classList.toggle('hidden');
-                }});
-        
+            jsonBtn.addEventListener('click', () => {
+                document.querySelectorAll('.file-json').forEach(el => el.classList.toggle('hidden'));
                 const isHidden = document.querySelector('.file-json')?.classList.contains('hidden') ?? false;
-                
                 jsonBtn.textContent = isHidden ? 'Show JSON' : 'Hide JSON';
-            }});
-        </script>
-        </html>""")
+            });
+            """)
+        if has_nbt:
+            f.write("""
+            const nbtBtn = document.getElementById('hideNbt');
+            nbtBtn.addEventListener('click', () => {
+                document.querySelectorAll('.file-nbt').forEach(el => el.classList.toggle('hidden'));
+                const isHidden = document.querySelector('.file-nbt')?.classList.contains('hidden') ?? false;
+                nbtBtn.textContent = isHidden ? 'Show NBT' : 'Hide NBT';
+            });
+            """)
+        if has_lang:
+            f.write("""
+            const langBtn = document.getElementById('hideLang');
+            langBtn.addEventListener('click', () => {
+                document.querySelectorAll('.file-lang').forEach(el => el.classList.toggle('hidden'));
+                const isHidden = document.querySelector('.file-lang')?.classList.contains('hidden') ?? false;
+                langBtn.textContent = isHidden ? 'Show lang' : 'Hide lang';
+            });
+            """)
+        f.write('</script>\n</body>\n</html>')
 
     print(f"{WHITE}Changes exported to {filepath}")
 
@@ -265,7 +325,7 @@ def compare_contents(contents1, contents2, vid1, vid2):
     :param vid2: The new version ID to compare against.
     """
     if vid1 is None:
-        print(f"{CYAN}Baseline set.")
+        print(f"{GREEN}Baseline set.")
     else:
         removed = [c for c in contents1 if c not in contents2]
         added = [c for c in contents2 if c not in contents1]
@@ -287,13 +347,16 @@ def compare_contents(contents1, contents2, vid1, vid2):
             export_changes(removed_tree, added_tree, vid1, vid2)
 
 
-def main(count:int=None, max_ver:str=None, min_ver:str=None):
+def main(count:int=None, max_ver:str=None, min_ver:str=None, min_sleep:int=10, max_sleep:int=60):
     """
     Download Minecraft version JARs and compare the assets to find changes.
     Creates .html files for each version pair, along with console output.
-    :param count: Number of versions to compare. Primarily used for debugging.
+    :param count: Number of versions to compare. Keep in mind that the first count is used as a baseline.
+     Primarily used for debugging.
     :param max_ver: The newest version to download.
     :param min_ver: The oldest version to download.
+    :param min_sleep: The minimum number of seconds to sleep between downloads.
+    :param max_sleep: The maximum number of seconds to sleep between downloads.
     """
     version_manifest = Path("version_manifest.json")
     seen = set()
@@ -313,48 +376,35 @@ def main(count:int=None, max_ver:str=None, min_ver:str=None):
                 elif v['id'].startswith('a') or v['id'].startswith('b') or v['id'].startswith('c') or v['id'].startswith('inf') or v['id'].startswith('rd'):
                     betas.append(v)
                 else:
-                    vid = v['id'].split('-')[0]
-                    vid = vid.split('_')[0]
-                    vid = vid.split('.')
-                    seenvid = vid[0] + '.' + vid[1]
+                    vid = v['id'].split('-')[0].split('_')[0].split('.')
+                    seenvid = f"{vid[0]}.{vid[1]}"
                     if seenvid not in seen:
-                        if max_ver:
-                            mv = max_ver.split('.')
-                            if vid[0] > mv[0]:
-                                print(f"{YELLOW}Skipping {v['id']} due to max version.")
-                                seen.add(seenvid)
-                                continue
-                            elif vid[1] > mv[1]:
-                                print(f"{YELLOW}Skipping {v['id']} due to max version.")
-                                seen.add(seenvid)
-                                continue
-                            elif len(vid) >= 3 and vid[2] > mv[2]:
-                                print(f"{YELLOW}Skipping {v['id']} due to max version.")
-                                seen.add(seenvid)
-                                continue
-                        if min_ver:
-                            mv = min_ver.split('.')
-                            if vid[0] < mv[0]:
-                                print(f"{YELLOW}Skipping {v['id']} due to min version.")
-                                seen.add(seenvid)
-                                continue
-                            elif vid[1] < mv[1]:
-                                print(f"{YELLOW}Skipping {v['id']} due to min version.")
-                                seen.add(seenvid)
-                                continue
-                            elif len(vid) >= 3 and vid[2] < mv[2]:
-                                print(f"{YELLOW}Skipping {v['id']} due to min version.")
-                                seen.add(seenvid)
-                                continue
-                        print(f"{YELLOW}Downloading {v['id']}")
+                        vid = [int(x) for x in vid]
+
+                        if min_ver and vid < [int(x) for x in min_ver.split('.')]:
+                            print(f"{YELLOW}Skipping {v['id']} due to min version.")
+                            seen.add(seenvid)
+                            continue
+
+                        if vid < [int(x) for x in "1.6.1".split('.')]:
+                            betas.append(v)
+                            continue
+
+                        if max_ver and vid > [int(x) for x in max_ver.split('.')]:
+                            print(f"{YELLOW}Skipping {v['id']} due to max version.")
+                            seen.add(seenvid)
+                            continue
+                        print(f"{CYAN}Downloading {v['id']}")
                         download_json(v['url'])
                         url = parse_json(v['id'])
                         if url:
                             download_jar(url)
                             contents = parse_jar(v['id'])
-                            compare_contents(last_data, contents, last_version, v['id'])
-                            last_data = contents
-                            last_version = v['id']
+                            if contents:
+                                compare_contents(last_data, contents, last_version, v['id'])
+                                last_data = contents
+                                last_version = v['id']
+                                seen.add(seenvid)
                         if count is not None:
                             if count > 1:
                                 count -= 1
@@ -362,13 +412,13 @@ def main(count:int=None, max_ver:str=None, min_ver:str=None):
                             else:
                                 print(f"{YELLOW}Finished.")
                                 return
-                        seen.add(seenvid)
-                        r = random.randint(10, 60)
+                        r = random.randint(min_sleep, max_sleep)
                         for i in range(r, 0, -1):
                             print(f"\r{YELLOW}Sleeping for {i} seconds...  ", end="", flush=True)
                             time.sleep(1)
                         print()
                     else:
+                        # print(f"{YELLOW}Skipping {v['id']} due to not being a major release")
                         minor_versions.append(v)
 
         else:
@@ -376,11 +426,90 @@ def main(count:int=None, max_ver:str=None, min_ver:str=None):
     else:
         print(f"{RED}Manifest not found.")
 
-    print(f"{CYAN}Minor versions: {len(minor_versions)}")
-    print(f"{CYAN}Snapshots: {len(snapshots)}")
-    print(f"{CYAN}Betas: {len(betas)}")
+    if len(betas) > 0:
+        last_data = []
+        last_version = None
+        print(f"{YELLOW}Beta versions:")
+        for v in betas:
+            vid = v['id'].split('-')[0].split('_')[0].split('.')
+            if len(vid) >= 2:
+                seenvid = f"{vid[0]}.{vid[1]}"
+            else:
+                seenvid = v['id']
+            if seenvid not in seen:
+                print(f"{CYAN}Downloading {v['id']}")
+                download_json(v['url'])
+                url = parse_json(v['id'])
+                if url:
+                    download_jar(url)
+                    contents = parse_jar(v['id'], is_beta=True)
+                    if contents:
+                        compare_contents(last_data, contents, last_version, v['id'])
+                        last_data = contents
+                        last_version = v['id']
+                        seen.add(seenvid)
+                if count is not None:
+                    if count > 1:
+                        count -= 1
+                        print(f"{YELLOW}Remaining: {count}")
+                    else:
+                        print(f"{YELLOW}Finished.")
+                        return
+                r = random.randint(min_sleep, max_sleep)
+                for i in range(r, 0, -1):
+                    print(f"\r{YELLOW}Sleeping for {i} seconds...  ", end="", flush=True)
+                    time.sleep(1)
+                print()
+
+    print(f"{YELLOW}Cleaning up...")
+    path = Path("assets/info.json")
+    if path.exists():
+        os.remove(path)
+    path = Path("assets/minecraft.jar")
+    if path.exists():
+        os.remove(path)
+    print(f"{CYAN}Seen versions:")
+    print(f"{CYAN}{", ".join(seen)}")
+    print(f"{CYAN}Minor versions skipped: {len(minor_versions)}")
+    print(f"{CYAN}Snapshots skipped: {len(snapshots)}")
     print(f"{GREEN}Finished.")
 
 
+def debug_list_ver():
+    version_manifest = Path("version_manifest.json")
+    if version_manifest.exists():
+        with open(version_manifest, 'r') as file:
+            data = json.load(file)
+        if 'versions' in data:
+            for v in data['versions']:
+                if 'snapshot' in v['id'] or 'w' in v['id'] or 'pre' in v['id'].lower() or 'rc' in v['id']:
+                    continue
+                elif v['id'].startswith('a') or v['id'].startswith('b') or v['id'].startswith('c') or v['id'].startswith('inf') or v['id'].startswith('rd'):
+                    continue
+                else:
+                    print(v['id'])
+
+
+def debug_download(version="rd-161348"):
+    version_manifest = Path("version_manifest.json")
+    if version_manifest.exists():
+        with open(version_manifest, 'r') as file:
+            data = json.load(file)
+        if 'versions' in data:
+            for v in data['versions']:
+                if v['id'] == version:
+                    download_json(v['url'])
+                    url = parse_json(v['id'])
+                    if url:
+                        download_jar(url)
+                    else:
+                        print(f"{RED}No URL found for {version}")
+        else:
+            print(f"{RED}Versions not found.")
+    else:
+        print(f"{RED}Manifest not found.")
+
+
 if __name__ == "__main__":
-    main(max_ver="1.14.4")
+    # debug_download("1.5.2")
+    main(max_ver="1.5.2", max_sleep=30)
